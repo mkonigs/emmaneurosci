@@ -2,7 +2,7 @@ Package: emmaneurosci
 Title: Emma Neuroscience Group functions (Emma Children's Hospital, Amsterdam UMC)
 Version: 0.1.0
 Authors@R: 
-    person("Marsh Königs", email = "m.konigs@amsterdamumc.nl", role = c("aut", "cre))
+    person("Marsh Königs", email = "m.konigs@amsterdamumc.nl", role = c("aut", "cre"))
 Description: Tools for cognitive neuroscience, including cluster analysis, neurocognitive network reconstruction, network analysis.
 License: MIT + file LICENSE
 Encoding: UTF-8
