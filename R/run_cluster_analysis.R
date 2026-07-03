@@ -41,6 +41,9 @@
 #'     per-cluster bar plots comparing each cluster against all others.}
 #'   \item{`combined_plot`}{A `gtable`/grob of all group plots arranged in a
 #'     grid. Draw with `grid::grid.draw(res$combined_plot)`.}
+#'   \item{`heterogeneity_plots`}{Named list of per-domain individual-level
+#'     bar plots (one per variable in `vars`), coloured by cluster. Produced
+#'     by [plot_domain_heterogeneity()].}
 #'   \item{`stats`}{List with two elements: `p_values` and `cohen_d`, each a
 #'     named list (one entry per cluster) of per-variable statistics.}
 #' }
@@ -278,13 +281,28 @@ run_cluster_analysis <- function(data,
     )
   }
 
+  # ======================= HETEROGENEITY PLOTS =======================
+
+  heterogeneity_plots <- plot_domain_heterogeneity(
+    data         = result_data,
+    vars         = vars,
+    id_var       = id_var,
+    colors       = stats::setNames(colors[seq_len(k)], as.character(seq_len(k))),
+    save_figures = save_figures,
+    figures_dir  = figures_dir,
+    file_tag     = paste0(file_tag, "_", scaling, "_", method, "_clusters_", k)
+  )
+
+  # =================================================================
+
   list(
-    data          = result_data,
-    cluster_model = clustering_model,
-    nbclust_plot  = nbclust_plot,
-    dendrogram    = dend_plot,
-    group_plots   = group_plots,
-    combined_plot = combined_plot,
-    stats         = list(p_values = stats_p, cohen_d = stats_d)
+    data                = result_data,
+    cluster_model       = clustering_model,
+    nbclust_plot        = nbclust_plot,
+    dendrogram          = dend_plot,
+    group_plots         = group_plots,
+    combined_plot       = combined_plot,
+    heterogeneity_plots = heterogeneity_plots,
+    stats               = list(p_values = stats_p, cohen_d = stats_d)
   )
 }
