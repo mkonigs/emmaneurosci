@@ -1,10 +1,10 @@
 #' Run cluster analysis on cognitive domain profiles
 #'
 #' Performs k-means clustering on a set of cognitive domain variables using
-#' either raw variables ("regular") or a UMAP embedding ("umap"). Produces
-#' an elbow plot, a dendrogram, per-cluster bar plots with t-test p-values
-#' and Cohen's d, and a combined grid figure. Returns all outputs as a list,
-#' with optional saving of figures and the clustered dataset to disk.
+#' either raw variables (`method = "regular"`) or a UMAP embedding
+#' (`method = "umap"`), followed by group-wise comparison plots, individual-
+#' level heterogeneity plots, and optionally cluster validity indices and
+#' bootstrap stability analysis.
 #'
 #' @param data `data.frame` containing the id column and all clustering
 #'   variables. Should already be filtered to the desired time-point / group
@@ -29,12 +29,18 @@
 #' @param data_dir Directory for saved data. Created if absent.
 #'   Default `"databases"`.
 #' @param file_tag Prefix used in output filenames. Default `"cluster_analysis"`.
+#' @param run_evaluation Logical; run [evaluate_clusters()] after clustering
+#'   to compute validity indices and bootstrap stability. Default `TRUE`.
+#' @param n_boot Number of bootstrap replicates for stability analysis.
+#'   Default `100`. Set to `0` to skip stability (validity only).
+#' @param nstart_boot Number of k-means random starts per bootstrap replicate.
+#'   Default `25`.
 #'
 #' @return A named list with the following elements:
 #' \describe{
 #'   \item{`data`}{`data.frame` with id column, all `vars`, and a `groups`
 #'     column containing the cluster assignment (integer, 1–k).}
-#'   \item{`cluster_model`}{The `kmeans` model object.}
+#'   \item{`cluster_model`}{The fitted `kmeans` object.}
 #'   \item{`nbclust_plot`}{WSS elbow plot (`ggplot`) to help choose `k`.}
 #'   \item{`dendrogram`}{Hierarchical clustering dendrogram (`ggplot`).}
 #'   \item{`group_plots`}{Named list (`"group_1"`, `"group_2"`, …) of
@@ -42,10 +48,13 @@
 #'   \item{`combined_plot`}{A `gtable`/grob of all group plots arranged in a
 #'     grid. Draw with `grid::grid.draw(res$combined_plot)`.}
 #'   \item{`heterogeneity_plots`}{Named list of per-domain individual-level
-#'     bar plots (one per variable in `vars`), coloured by cluster. Produced
-#'     by [plot_domain_heterogeneity()].}
-#'   \item{`stats`}{List with two elements: `p_values` and `cohen_d`, each a
-#'     named list (one entry per cluster) of per-variable statistics.}
+#'     bar plots (one per variable in `vars`), coloured by cluster.}
+#'   \item{`evaluation`}{`NULL` if `run_evaluation = FALSE`; otherwise the
+#'     list returned by [evaluate_clusters()], containing `$validity` (a
+#'     data frame of internal validity indices) and `$stability` (ARI,
+#'     consensus matrix, and patient-level consensus scores).}
+#'   \item{`stats`}{List with `p_values` and `cohen_d`, each a named list
+#'     (one entry per cluster) of per-variable statistics.}
 #' }
 #'
 #' @examples
@@ -57,29 +66,29 @@
 #' dat$test <- ymd(dat$test)
 #' data_T1 <- dat[dat$group == 1, ]
 #'
-#' domain_vars <- c("d_proc", "d_att_ctrl", "d_mem",
-#'                   "d_ver_wm", "d_vis_wm", "d_visuom")
-#'
 #' res <- run_cluster_analysis(
 #'   data         = data_T1,
-#'   vars         = domain_vars,
+#'   vars         = c("d_proc", "d_att_ctrl", "d_mem",
+#'                     "d_ver_wm", "d_vis_wm", "d_visuom"),
 #'   scaling      = "unscaled",
 #'   method       = "umap",
 #'   k            = 4,
 #'   save_figures = TRUE,
-#'   save_data    = TRUE
+#'   save_data    = TRUE,
+#'   n_boot       = 100
 #' )
 #'
-#' head(res$data)                      # clustered dataset
-#' res$nbclust_plot                    # elbow plot
-#' res$dendrogram                      # dendrogram
-#' res$group_plots$group_1             # bar plot: cluster 1 vs rest
-#' grid::grid.draw(res$combined_plot)  # all clusters combined
+#' res$data                               # clustered dataset
+#' res$evaluation$validity                # validity indices table
+#' res$evaluation$stability$mean_ari      # mean bootstrap ARI
+#' res$evaluation$stability$patient_consensus  # patient-level consensus
+#' grid::grid.draw(res$combined_plot)     # all group plots
 #' }
 #'
 #' @importFrom dplyr select all_of
 #' @importFrom ggplot2 ggplot aes geom_bar geom_errorbar scale_fill_manual
-#'   ggtitle xlab ylab annotate theme_minimal scale_x_discrete
+#'   ggtitle xlab ylab annotate theme element_text element_blank
+#'   position_dodge guide_axis scale_x_discrete
 #' @importFrom ggpubr theme_pubr
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.draw
@@ -92,18 +101,21 @@
 #' @export
 run_cluster_analysis <- function(data,
                                   vars,
-                                  id_var       = "subj",
-                                  scaling      = c("unscaled", "scaled"),
-                                  method       = c("umap", "regular"),
-                                  k            = 4,
-                                  seed         = 123,
-                                  colors       = c("skyblue", "palegreen", "orange",
-                                                   "tomato", "purple", "gold"),
-                                  save_figures = FALSE,
-                                  figures_dir  = "figures",
-                                  save_data    = FALSE,
-                                  data_dir     = "databases",
-                                  file_tag     = "cluster_analysis") {
+                                  id_var         = "subj",
+                                  scaling        = c("unscaled", "scaled"),
+                                  method         = c("umap", "regular"),
+                                  k              = 4,
+                                  seed           = 123,
+                                  colors         = c("skyblue", "palegreen", "orange",
+                                                     "tomato", "purple", "gold"),
+                                  save_figures   = FALSE,
+                                  figures_dir    = "figures",
+                                  save_data      = FALSE,
+                                  data_dir       = "databases",
+                                  file_tag       = "cluster_analysis",
+                                  run_evaluation = TRUE,
+                                  n_boot         = 100,
+                                  nstart_boot    = 25) {
 
   scaling <- match.arg(scaling)
   method  <- match.arg(method)
@@ -145,7 +157,8 @@ run_cluster_analysis <- function(data,
                                         color_labels_by_k = TRUE, rect = TRUE)
 
     set.seed(seed)
-    clustering_model <- kmeans(as.matrix(data_sel), k, nstart = 100)
+    clustering_model <- kmeans(as.matrix(data_sel), k,
+                                nstart = 100, iter.max = 300)
 
   } else {
 
@@ -154,7 +167,8 @@ run_cluster_analysis <- function(data,
     umap_embedding <- umap_result$layout
 
     set.seed(seed)
-    nbclust_plot <- factoextra::fviz_nbclust(umap_embedding, kmeans, method = "wss")
+    nbclust_plot <- factoextra::fviz_nbclust(umap_embedding, kmeans,
+                                              method = "wss")
 
     set.seed(seed)
     hc <- umap_embedding |>
@@ -166,7 +180,8 @@ run_cluster_analysis <- function(data,
                                         color_labels_by_k = TRUE, rect = TRUE)
 
     set.seed(seed)
-    clustering_model <- kmeans(umap_embedding, k, nstart = 100)
+    clustering_model <- kmeans(umap_embedding, k,
+                                nstart = 100, iter.max = 300)
   }
 
   data_sel$groups <- clustering_model$cluster
@@ -212,7 +227,7 @@ run_cluster_analysis <- function(data,
     col_z <- colors[((z - 1L) %% length(colors)) + 1L]
 
     plot_z <- ggplot2::ggplot(data_long_m,
-                               ggplot2::aes(x = variable, y = value,
+                               ggplot2::aes(x    = variable, y = value,
                                              fill = factor(groups))) +
       ggplot2::geom_errorbar(
         ggplot2::aes(ymin = value - se, ymax = value + se, width = 0.5),
@@ -235,7 +250,8 @@ run_cluster_analysis <- function(data,
                       axis.text.y   = ggplot2::element_text(size = 9),
                       plot.title    = ggplot2::element_text(hjust = 0.5),
                       legend.title  = ggplot2::element_blank()) +
-      ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(n.dodge = 2))
+      ggplot2::scale_x_discrete(
+        guide = ggplot2::guide_axis(n.dodge = 2))
 
     group_plots[[paste0("group_", z)]] <- plot_z
 
@@ -248,7 +264,7 @@ run_cluster_analysis <- function(data,
   }
 
   # ---- combined grid ----
-  nrow_lookup  <- c(`2` = 2, `3` = 2, `4` = 2, `5` = 3, `6` = 3)
+  nrow_lookup   <- c(`2` = 2, `3` = 2, `4` = 2, `5` = 3, `6` = 3)
   combined_plot <- gridExtra::arrangeGrob(
     grobs = group_plots,
     nrow  = nrow_lookup[[as.character(k)]])
@@ -262,7 +278,7 @@ run_cluster_analysis <- function(data,
     grDevices::dev.off()
   }
 
-  # ======================= RETURN DATASET =======================
+  # ======================= FINAL DATASET =======================
 
   result_data <- data.frame(
     stats::setNames(list(subj), id_var),
@@ -293,6 +309,23 @@ run_cluster_analysis <- function(data,
     file_tag     = paste0(file_tag, "_", scaling, "_", method, "_clusters_", k)
   )
 
+  # ======================= VALIDITY & STABILITY =======================
+
+  evaluation <- NULL
+  if (run_evaluation) {
+    evaluation <- evaluate_clusters(
+      cluster_result = list(data = result_data,
+                             cluster_model = clustering_model),
+      vars           = vars,
+      scaling        = scaling,
+      method         = method,
+      id_var         = id_var,
+      n_boot         = n_boot,
+      nstart_boot    = nstart_boot,
+      seed           = seed
+    )
+  }
+
   # =================================================================
 
   list(
@@ -303,6 +336,7 @@ run_cluster_analysis <- function(data,
     group_plots         = group_plots,
     combined_plot       = combined_plot,
     heterogeneity_plots = heterogeneity_plots,
+    evaluation          = evaluation,
     stats               = list(p_values = stats_p, cohen_d = stats_d)
   )
 }

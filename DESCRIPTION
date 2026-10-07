@@ -1,12 +1,17 @@
-Package: emmaneurosci
-Title: Emma Neuroscience Group functions (Emma Children's Hospital, Amsterdam UMC)
-Version: 0.1.0
+Package: cogcor
+Title: Cognitive Correlates Cluster Analysis Toolkit
+Version: 0.2.0
 Authors@R: 
-    person("Marsh Königs", email = "m.konigs@amsterdamumc.nl", role = c("aut"))
-Description: Tools for cognitive neuroscience, including cluster analysis, neurocognitive network reconstruction, network analysis.
+    person("Your Name", email = "your.email@institution.nl", role = c("aut", "cre"))
+Description: Tools for clustering and visualising cognitive domain profiles,
+    developed for the COGCO-R study. Supports UMAP-based and hierarchical
+    k-means clustering, group-wise comparison plots, individual-level
+    heterogeneity visualisation, and internal cluster validity and bootstrap
+    stability evaluation.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
 Imports:
     dplyr,
     ggplot2,
@@ -17,13 +22,14 @@ Imports:
     Rmisc,
     psych,
     factoextra,
-    umap
+    umap,
+    cluster,
+    mclust
 Suggests:
     lubridate,
     testthat (>= 3.0.0),
     knitr,
     rmarkdown
 Config/testthat/edition: 3
-URL: https://github.com/mkonigs/emmaneurosci
-BugReports: https://github.com/mkonigs/emmaneurosci
-Config/roxygen2/version: 8.0.0
+URL: https://github.com/YOUR_GITHUB_USERNAME/cogcor
+BugReports: https://github.com/YOUR_GITHUB_USERNAME/cogcor/issues
