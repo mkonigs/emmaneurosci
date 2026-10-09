@@ -16,7 +16,7 @@
 #'   row-centres each participant's scores by subtracting the row mean.
 #' @param method `"umap"` (default) embeds the data with UMAP before
 #'   clustering; `"regular"` clusters directly on `vars`.
-#' @param k Number of clusters (2–6). Default `4`.
+#' @param k Number of clusters (2-6). Default `4`.
 #' @param seed Integer random seed for reproducibility. Default `123`.
 #' @param colors Character vector of fill colours, one per cluster.
 #'   Defaults to `c("skyblue", "palegreen", "orange", "tomato", "purple", "gold")`.
@@ -39,11 +39,11 @@
 #' @return A named list with the following elements:
 #' \describe{
 #'   \item{`data`}{`data.frame` with id column, all `vars`, and a `groups`
-#'     column containing the cluster assignment (integer, 1–k).}
+#'     column containing the cluster assignment (integer, 1-k).}
 #'   \item{`cluster_model`}{The fitted `kmeans` object.}
 #'   \item{`nbclust_plot`}{WSS elbow plot (`ggplot`) to help choose `k`.}
 #'   \item{`dendrogram`}{Hierarchical clustering dendrogram (`ggplot`).}
-#'   \item{`group_plots`}{Named list (`"group_1"`, `"group_2"`, …) of
+#'   \item{`group_plots`}{Named list (`"group_1"`, `"group_2"`, ...) of
 #'     per-cluster bar plots comparing each cluster against all others.}
 #'   \item{`combined_plot`}{A `gtable`/grob of all group plots arranged in a
 #'     grid. Draw with `grid::grid.draw(res$combined_plot)`.}
@@ -86,13 +86,13 @@
 #' }
 #'
 #' @importFrom dplyr select all_of
+#' @importFrom tidyr pivot_longer
 #' @importFrom ggplot2 ggplot aes geom_bar geom_errorbar scale_fill_manual
 #'   ggtitle xlab ylab annotate theme element_text element_blank
 #'   position_dodge guide_axis scale_x_discrete
 #' @importFrom ggpubr theme_pubr
 #' @importFrom gridExtra arrangeGrob
 #' @importFrom grid grid.draw
-#' @importFrom reshape2 melt
 #' @importFrom Rmisc summarySE
 #' @importFrom psych cohen.d
 #' @importFrom factoextra fviz_nbclust fviz_dend
@@ -198,12 +198,19 @@ run_cluster_analysis <- function(data,
 
   for (z in seq_len(k)) {
 
-    grp_data        <- data_sel
+    grp_data        <- data_sel[, c(vars, "groups")]
     grp_data$groups <- as.numeric(grp_data$groups == z)
 
     if (sum(grp_data$groups) <= 1) next
 
-    data_long   <- reshape2::melt(grp_data, id = "groups")
+    # use pivot_longer instead of melt
+    data_long <- tidyr::pivot_longer(
+      grp_data,
+      cols      = dplyr::all_of(vars),
+      names_to  = "variable",
+      values_to = "value"
+    )
+
     data_long_m <- Rmisc::summarySE(data_long, measurevar = "value",
                                      groupvars = c("variable", "groups"))
 
